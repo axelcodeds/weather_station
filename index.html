@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="es">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Estación Meteorológica</title>
+        <link
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap"
+            rel="stylesheet"
+        />
+        <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+        <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+        <style>
+            body {
+                font-family: 'Inter', sans-serif;
+                background: linear-gradient(to right, #cce2ff, #e0f7fa);
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                min-height: 100vh;
+                margin: 0;
+            }
+
+            .container {
+                background-color: white;
+                padding: 2rem 3rem;
+                border-radius: 16px;
+                box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+                max-width: 400px;
+                width: 100%;
+                text-align: center;
+            }
+
+            h1 {
+                font-size: 1.5rem;
+                margin-bottom: 1.5rem;
+                color: #0077b6;
+            }
+
+            p {
+                font-size: 1.1rem;
+                margin: 0.5rem 0;
+            }
+
+            strong {
+                color: #023e8a;
+            }
+
+            #status {
+                margin-top: 1rem;
+                color: red;
+                font-weight: bold;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🌦️ Estación Meteorológica</h1>
+            <p><strong>Temperatura:</strong> <span id="temp">...</span> °C</p>
+            <p><strong>Humedad:</strong> <span id="hum">...</span> %</p>
+            <p><strong>Viento:</strong> <span id="wind">...</span> km/h</p>
+            <p>
+                <strong>Dirección del viento:</strong> <span id="dir">...</span>
+            </p>
+            <p><strong>Precipitación:</strong> <span id="rain">...</span> mm</p>
+            <p id="status"></p>
+        </div>
+
+        <script>
+            const firebaseConfig = {
+                apiKey: 'fake-placeholder',
+                databaseURL:
+                    'https://ultrasonico-esp32-default-rtdb.firebaseio.com',
+            }
+            firebase.initializeApp(firebaseConfig)
+            const db = firebase.database()
+
+            function actualizarDato(ref, id) {
+                db.ref(ref).on(
+                    'value',
+                    (snapshot) => {
+                        const val = snapshot.val()
+                        document.getElementById(id).textContent =
+                            val !== null ? val : 'N/A'
+                        document.getElementById('status').textContent = ''
+                    },
+                    (err) => {
+                        document.getElementById('status').textContent =
+                            'ESP32 desconectado o error de lectura.'
+                    }
+                )
+            }
+
+            actualizarDato('/weather/temperature', 'temp')
+            actualizarDato('/weather/humidity', 'hum')
+            actualizarDato('/weather/wind_speed', 'wind')
+            actualizarDato('/weather/wind_dir', 'dir')
+            actualizarDato('/weather/rain_mm', 'rain')
+        </script>
+    </body>
+</html>
