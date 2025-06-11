@@ -43,11 +43,27 @@
                 box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
                 max-width: 800px;
                 width: 100%;
+                margin-bottom: 20px;
+            }
+
+            .history-container {
+                background-color: white;
+                padding: 2rem;
+                border-radius: 16px;
+                box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+                max-width: 800px;
+                width: 100%;
             }
 
             h1 {
                 font-size: 1.5rem;
                 margin-bottom: 1.5rem;
+                color: #0077b6;
+            }
+
+            h2 {
+                font-size: 1.3rem;
+                margin-bottom: 1rem;
                 color: #0077b6;
             }
 
@@ -62,7 +78,6 @@
 
             #status {
                 margin-top: 1rem;
-                color: red;
                 font-weight: bold;
             }
 
@@ -95,6 +110,66 @@
             .connection-box strong {
                 color: #0077b6;
             }
+
+            .connection-status {
+                display: inline-block;
+                padding: 5px 10px;
+                border-radius: 20px;
+                font-weight: bold;
+                margin-top: 10px;
+            }
+
+            .connected {
+                background-color: #d4edda;
+                color: #155724;
+                border: 1px solid #c3e6cb;
+            }
+
+            .disconnected {
+                background-color: #f8d7da;
+                color: #721c24;
+                border: 1px solid #f5c6cb;
+            }
+
+            .history-buttons {
+                display: flex;
+                justify-content: center;
+                gap: 10px;
+                margin-bottom: 15px;
+                flex-wrap: wrap;
+            }
+
+            button {
+                background-color: #0077b6;
+                color: white;
+                border: none;
+                padding: 8px 15px;
+                border-radius: 5px;
+                cursor: pointer;
+                transition: background-color 0.3s;
+            }
+
+            button:hover {
+                background-color: #005f92;
+            }
+
+            .history-data {
+                background: #f1f8fe;
+                border-radius: 8px;
+                padding: 15px;
+                margin-top: 15px;
+            }
+
+            .history-item {
+                display: flex;
+                justify-content: space-between;
+                padding: 5px 0;
+                border-bottom: 1px solid #e1e1e1;
+            }
+
+            .history-item:last-child {
+                border-bottom: none;
+            }
         </style>
     </head>
     <body>
@@ -123,6 +198,7 @@
             <div class="connection-box">
                 <strong>Última conexión:</strong>
                 <span id="lastConnection">...</span>
+                <div id="connectionStatus" class="connection-status">...</div>
             </div>
 
             <p id="status"></p>
@@ -131,6 +207,22 @@
         <div class="chart-container">
             <h2>Historial de Datos</h2>
             <canvas id="weatherChart"></canvas>
+        </div>
+
+        <div class="history-container">
+            <h2>Datos Anteriores</h2>
+            <div class="history-buttons">
+                <button id="btn5min">Últimos 5 min</button>
+                <button id="btn15min">Últimos 15 min</button>
+                <button id="btn30min">Últimos 30 min</button>
+                <button id="btn1hora">Última hora</button>
+            </div>
+            <div class="history-data" id="historyData">
+                <p>
+                    Seleccione un intervalo de tiempo para ver los datos
+                    históricos
+                </p>
+            </div>
         </div>
 
         <script>
@@ -142,16 +234,25 @@
             firebase.initializeApp(firebaseConfig)
             const db = firebase.database()
 
+            // Variables globales
+            let lastUpdateTime = null
+            const historyData = []
+            const maxDataPoints = 20
+            const timeLabels = []
+            const tempData = []
+            const humData = []
+            const windData = []
+
             // Configuración del gráfico
             const ctx = document.getElementById('weatherChart').getContext('2d')
             const weatherChart = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: [], // Las horas se añadirán aquí
+                    labels: timeLabels,
                     datasets: [
                         {
                             label: 'Temperatura (°C)',
-                            data: [],
+                            data: tempData,
                             borderColor: 'rgba(255, 99, 132, 1)',
                             backgroundColor: 'rgba(255, 99, 132, 0.2)',
                             tension: 0.3,
@@ -159,7 +260,7 @@
                         },
                         {
                             label: 'Humedad (%)',
-                            data: [],
+                            data: humData,
                             borderColor: 'rgba(54, 162, 235, 1)',
                             backgroundColor: 'rgba(54, 162, 235, 0.2)',
                             tension: 0.3,
@@ -167,7 +268,7 @@
                         },
                         {
                             label: 'Velocidad Viento (km/h)',
-                            data: [],
+                            data: windData,
                             borderColor: 'rgba(75, 192, 192, 1)',
                             backgroundColor: 'rgba(75, 192, 192, 0.2)',
                             tension: 0.3,
@@ -241,15 +342,8 @@
                 },
             })
 
-            // Variables para almacenar los datos históricos
-            const maxDataPoints = 20 // Número máximo de puntos a mostrar
-            const timeLabels = []
-            const tempData = []
-            const humData = []
-            const windData = []
-
-            function updateConnectionTime() {
-                const now = new Date()
+            // Función para formatear fecha
+            function formatDate(date) {
                 const options = {
                     hour: '2-digit',
                     minute: '2-digit',
@@ -258,11 +352,110 @@
                     month: '2-digit',
                     year: 'numeric',
                 }
-                const dateString = now.toLocaleDateString('es-ES', options)
-                document.getElementById('lastConnection').textContent =
-                    dateString
+                return date.toLocaleDateString('es-ES', options)
             }
 
+            // Función para actualizar el estado de conexión
+            function updateConnectionStatus() {
+                const now = new Date()
+                const statusElement =
+                    document.getElementById('connectionStatus')
+
+                if (!lastUpdateTime) {
+                    statusElement.textContent = 'Estado desconocido'
+                    statusElement.className = 'connection-status'
+                    return
+                }
+
+                const diffMinutes = (now - lastUpdateTime) / (1000 * 60)
+
+                if (diffMinutes > 10) {
+                    statusElement.textContent = 'ESP32 DESCONECTADO'
+                    statusElement.className = 'connection-status disconnected'
+                    document.getElementById('status').textContent =
+                        'Dispositivo no responde - Última conexión hace ' +
+                        diffMinutes.toFixed(0) +
+                        ' minutos'
+                    document.getElementById('status').style.color = 'red'
+                } else {
+                    statusElement.textContent = 'ESP32 CONECTADO'
+                    statusElement.className = 'connection-status connected'
+                    document.getElementById('status').textContent =
+                        'Dispositivo conectado correctamente'
+                    document.getElementById('status').style.color = 'green'
+                }
+            }
+
+            // Función para actualizar la hora de conexión
+            function updateConnectionTime() {
+                const now = new Date()
+                lastUpdateTime = now
+                document.getElementById('lastConnection').textContent =
+                    formatDate(now)
+                updateConnectionStatus()
+
+                // Guardar datos históricos
+                const temp = document.getElementById('temp').textContent
+                const hum = document.getElementById('hum').textContent
+                const wind = document.getElementById('wind').textContent
+
+                if (temp !== '...' && hum !== '...' && wind !== '...') {
+                    historyData.push({
+                        time: now,
+                        temp: temp,
+                        hum: hum,
+                        wind: wind,
+                    })
+                }
+            }
+
+            // Función para mostrar datos históricos
+            function showHistory(minutes) {
+                const now = new Date()
+                const cutoffTime = new Date(now.getTime() - minutes * 60000)
+                const filteredData = historyData.filter(
+                    (item) => item.time >= cutoffTime
+                )
+                const historyElement = document.getElementById('historyData')
+
+                if (filteredData.length === 0) {
+                    historyElement.innerHTML =
+                        '<p>No hay datos disponibles para el intervalo seleccionado</p>'
+                    return
+                }
+
+                let html = '<div>'
+                filteredData.forEach((item) => {
+                    html += `
+                        <div class="history-item">
+                            <span><strong>${formatDate(
+                                item.time
+                            )}</strong></span>
+                            <span>T: ${item.temp}°C | H: ${item.hum}% | V: ${
+                        item.wind
+                    }km/h</span>
+                        </div>
+                    `
+                })
+                html += '</div>'
+                historyElement.innerHTML = html
+            }
+
+            // Configurar botones de histórico
+            document
+                .getElementById('btn5min')
+                .addEventListener('click', () => showHistory(5))
+            document
+                .getElementById('btn15min')
+                .addEventListener('click', () => showHistory(15))
+            document
+                .getElementById('btn30min')
+                .addEventListener('click', () => showHistory(30))
+            document
+                .getElementById('btn1hora')
+                .addEventListener('click', () => showHistory(60))
+
+            // Función para actualizar datos de Firebase
             function actualizarDato(ref, id) {
                 db.ref(ref).on(
                     'value',
@@ -270,10 +463,11 @@
                         const val = snapshot.val()
                         document.getElementById(id).textContent =
                             val !== null ? val : 'N/A'
-                        document.getElementById('status').textContent = ''
 
-                        // Actualizar la hora de conexión
-                        updateConnectionTime()
+                        // Actualizar la hora de conexión y estado
+                        if (id === 'temp') {
+                            updateConnectionTime()
+                        }
 
                         // Actualizar el gráfico cuando llegan nuevos datos
                         if (id === 'temp' || id === 'hum' || id === 'wind') {
@@ -282,11 +476,13 @@
                     },
                     (err) => {
                         document.getElementById('status').textContent =
-                            'ESP32 desconectado o error de lectura.'
+                            'Error de lectura de datos'
+                        document.getElementById('status').style.color = 'red'
                     }
                 )
             }
 
+            // Función para actualizar el gráfico
             function updateChartData(type, value) {
                 const now = new Date()
                 const timeString =
@@ -326,16 +522,16 @@
                 }
 
                 // Actualizar el gráfico
-                weatherChart.data.labels = timeLabels
-                weatherChart.data.datasets[0].data = tempData
-                weatherChart.data.datasets[1].data = humData
-                weatherChart.data.datasets[2].data = windData
                 weatherChart.update()
             }
 
-            // Inicializar la hora de conexión
+            // Inicializar la hora de conexión y estado
             updateConnectionTime()
 
+            // Verificar estado de conexión cada minuto
+            setInterval(updateConnectionStatus, 60000)
+
+            // Cargar datos iniciales
             actualizarDato('/weather/temperature', 'temp')
             actualizarDato('/weather/humidity', 'hum')
             actualizarDato('/weather/wind_speed', 'wind')
