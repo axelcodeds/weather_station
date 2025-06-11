@@ -10,6 +10,7 @@
         />
         <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
         <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <style>
             body {
                 font-family: 'Inter', sans-serif;
@@ -19,6 +20,9 @@
                 align-items: center;
                 min-height: 100vh;
                 margin: 0;
+                padding: 20px;
+                box-sizing: border-box;
+                flex-direction: column;
             }
 
             .container {
@@ -26,9 +30,19 @@
                 padding: 2rem 3rem;
                 border-radius: 16px;
                 box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-                max-width: 400px;
+                max-width: 800px;
                 width: 100%;
                 text-align: center;
+                margin-bottom: 20px;
+            }
+
+            .chart-container {
+                background-color: white;
+                padding: 2rem;
+                border-radius: 16px;
+                box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+                max-width: 800px;
+                width: 100%;
             }
 
             h1 {
@@ -51,19 +65,72 @@
                 color: red;
                 font-weight: bold;
             }
+
+            .data-container {
+                display: flex;
+                justify-content: space-around;
+                flex-wrap: wrap;
+                margin-bottom: 20px;
+            }
+
+            .data-box {
+                background: #f8f9fa;
+                border-radius: 8px;
+                padding: 10px 15px;
+                margin: 5px;
+                min-width: 120px;
+                box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            }
+
+            .connection-box {
+                background: #e8f4f8;
+                border-radius: 8px;
+                padding: 10px 15px;
+                margin: 15px auto 0;
+                max-width: 300px;
+                box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+                border-left: 4px solid #0077b6;
+            }
+
+            .connection-box strong {
+                color: #0077b6;
+            }
         </style>
     </head>
     <body>
         <div class="container">
             <h1>🌦️ Estación Meteorológica</h1>
-            <p><strong>Temperatura:</strong> <span id="temp">...</span> °C</p>
-            <p><strong>Humedad:</strong> <span id="hum">...</span> %</p>
-            <p><strong>Viento:</strong> <span id="wind">...</span> km/h</p>
-            <p>
-                <strong>Dirección del viento:</strong> <span id="dir">...</span>
-            </p>
-            <p><strong>Precipitación:</strong> <span id="rain">...</span> mm</p>
+
+            <div class="data-container">
+                <div class="data-box">
+                    <strong>Temperatura:</strong> <span id="temp">...</span> °C
+                </div>
+                <div class="data-box">
+                    <strong>Humedad:</strong> <span id="hum">...</span> %
+                </div>
+                <div class="data-box">
+                    <strong>Viento:</strong> <span id="wind">...</span> km/h
+                </div>
+                <div class="data-box">
+                    <strong>Dirección:</strong> <span id="dir">...</span>
+                </div>
+                <div class="data-box">
+                    <strong>Precipitación:</strong>
+                    <span id="rain">...</span> mm
+                </div>
+            </div>
+
+            <div class="connection-box">
+                <strong>Última conexión:</strong>
+                <span id="lastConnection">...</span>
+            </div>
+
             <p id="status"></p>
+        </div>
+
+        <div class="chart-container">
+            <h2>Historial de Datos</h2>
+            <canvas id="weatherChart"></canvas>
         </div>
 
         <script>
@@ -75,6 +142,127 @@
             firebase.initializeApp(firebaseConfig)
             const db = firebase.database()
 
+            // Configuración del gráfico
+            const ctx = document.getElementById('weatherChart').getContext('2d')
+            const weatherChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [], // Las horas se añadirán aquí
+                    datasets: [
+                        {
+                            label: 'Temperatura (°C)',
+                            data: [],
+                            borderColor: 'rgba(255, 99, 132, 1)',
+                            backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                            tension: 0.3,
+                            yAxisID: 'y',
+                        },
+                        {
+                            label: 'Humedad (%)',
+                            data: [],
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                            tension: 0.3,
+                            yAxisID: 'y1',
+                        },
+                        {
+                            label: 'Velocidad Viento (km/h)',
+                            data: [],
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                            backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                            tension: 0.3,
+                            yAxisID: 'y2',
+                        },
+                    ],
+                },
+                options: {
+                    responsive: true,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Hora',
+                            },
+                        },
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            title: {
+                                display: true,
+                                text: 'Temperatura (°C)',
+                            },
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            grid: {
+                                drawOnChartArea: false,
+                            },
+                            title: {
+                                display: true,
+                                text: 'Humedad (%)',
+                            },
+                            min: 0,
+                            max: 100,
+                        },
+                        y2: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            grid: {
+                                drawOnChartArea: false,
+                            },
+                            title: {
+                                display: true,
+                                text: 'Viento (km/h)',
+                            },
+                        },
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function (context) {
+                                    let label = context.dataset.label || ''
+                                    if (label) {
+                                        label += ': '
+                                    }
+                                    label += context.parsed.y
+                                    return label
+                                },
+                            },
+                        },
+                    },
+                },
+            })
+
+            // Variables para almacenar los datos históricos
+            const maxDataPoints = 20 // Número máximo de puntos a mostrar
+            const timeLabels = []
+            const tempData = []
+            const humData = []
+            const windData = []
+
+            function updateConnectionTime() {
+                const now = new Date()
+                const options = {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                }
+                const dateString = now.toLocaleDateString('es-ES', options)
+                document.getElementById('lastConnection').textContent =
+                    dateString
+            }
+
             function actualizarDato(ref, id) {
                 db.ref(ref).on(
                     'value',
@@ -83,6 +271,14 @@
                         document.getElementById(id).textContent =
                             val !== null ? val : 'N/A'
                         document.getElementById('status').textContent = ''
+
+                        // Actualizar la hora de conexión
+                        updateConnectionTime()
+
+                        // Actualizar el gráfico cuando llegan nuevos datos
+                        if (id === 'temp' || id === 'hum' || id === 'wind') {
+                            updateChartData(id, val)
+                        }
                     },
                     (err) => {
                         document.getElementById('status').textContent =
@@ -90,6 +286,55 @@
                     }
                 )
             }
+
+            function updateChartData(type, value) {
+                const now = new Date()
+                const timeString =
+                    now.getHours() +
+                    ':' +
+                    now.getMinutes() +
+                    ':' +
+                    now.getSeconds()
+
+                // Añadir nueva hora si no estamos actualizando datos simultáneamente
+                if (
+                    timeLabels.length === 0 ||
+                    timeLabels[timeLabels.length - 1] !== timeString
+                ) {
+                    timeLabels.push(timeString)
+
+                    // Mantener solo los últimos maxDataPoints
+                    if (timeLabels.length > maxDataPoints) {
+                        timeLabels.shift()
+                    }
+                }
+
+                // Actualizar los datos según el tipo
+                switch (type) {
+                    case 'temp':
+                        tempData.push(value)
+                        if (tempData.length > maxDataPoints) tempData.shift()
+                        break
+                    case 'hum':
+                        humData.push(value)
+                        if (humData.length > maxDataPoints) humData.shift()
+                        break
+                    case 'wind':
+                        windData.push(value)
+                        if (windData.length > maxDataPoints) windData.shift()
+                        break
+                }
+
+                // Actualizar el gráfico
+                weatherChart.data.labels = timeLabels
+                weatherChart.data.datasets[0].data = tempData
+                weatherChart.data.datasets[1].data = humData
+                weatherChart.data.datasets[2].data = windData
+                weatherChart.update()
+            }
+
+            // Inicializar la hora de conexión
+            updateConnectionTime()
 
             actualizarDato('/weather/temperature', 'temp')
             actualizarDato('/weather/humidity', 'hum')
